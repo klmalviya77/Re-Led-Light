@@ -13,16 +13,18 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
   const [location, navigate] = useLocation();
   
-  // Check if user is authenticated
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/admin/check"],
+  // Enhanced authentication check with error handling
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin-auth-check"],
+    queryFn: () => apiRequest("GET", "/api/admin/check", {}),
+    retry: false
   });
   
   useEffect(() => {
-    if (!isLoading && data && !data.isAdmin) {
+    if (error || (!isLoading && !data?.isAdmin)) {
       navigate("/admin/login");
     }
-  }, [data, isLoading, navigate]);
+  }, [data, isLoading, error, navigate]);
   
   const handleLogout = async () => {
     try {
@@ -36,15 +38,11 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p>Loading...</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
   
-  if (!data?.isAdmin) {
-    return null;
-  }
-
   return (
     <div className="flex min-h-screen bg-gray-100">
       {/* Sidebar */}
@@ -64,7 +62,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           </Button>
           
           <Button
-            variant={location === "/admin/products" ? "secondary" : "ghost"}
+            variant={location.includes("/admin/products") ? "secondary" : "ghost"}
             className="w-full justify-start"
             onClick={() => navigate("/admin/products")}
           >
@@ -73,7 +71,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           </Button>
           
           <Button
-            variant={location === "/admin/orders" ? "secondary" : "ghost"}
+            variant={location.includes("/admin/orders") ? "secondary" : "ghost"}
             className="w-full justify-start"
             onClick={() => navigate("/admin/orders")}
           >
@@ -81,19 +79,21 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             Orders
           </Button>
           
-          <Button
-            variant="ghost"
-            className="w-full justify-start mt-auto text-red-300 hover:text-red-200 hover:bg-red-900/20"
-            onClick={handleLogout}
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
+          <div className="absolute bottom-6 left-6 right-6">
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-red-300 hover:text-red-200 hover:bg-red-900/20"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </nav>
       </div>
       
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
         <header className="bg-white shadow-sm p-4 flex justify-between items-center md:hidden">
           <h1 className="text-xl font-bold">{title}</h1>
@@ -102,12 +102,14 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           </Button>
         </header>
         
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6 overflow-auto">
           <div className="mb-6 hidden md:block">
             <h1 className="text-2xl font-bold">{title}</h1>
           </div>
           
-          {children}
+          <div className="bg-white rounded-lg shadow-sm p-4 md:p-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>
