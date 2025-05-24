@@ -21,10 +21,8 @@ export function Header() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/">
-            <a className="flex items-center flex-shrink-0">
-              <span className="font-bold text-xl text-primary cursor-pointer">RE LED LIGHT</span>
-            </a>
+          <Link href="/" className="flex items-center flex-shrink-0">
+            <span className="font-bold text-xl text-primary cursor-pointer">RE LED LIGHT</span>
           </Link>
           
           {/* Desktop Navigation */}
