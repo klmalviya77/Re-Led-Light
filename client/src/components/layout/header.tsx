@@ -1,179 +1,171 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useCart } from "@/contexts/cart-context";
-import { useAuth } from "@/contexts/auth-context";
-import { 
-  Search, 
-  ShoppingCart, 
-  Menu, 
-  X 
-} from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useAuth } from "@/context/auth-context";
+import { useCart } from "@/hooks/use-cart";
+import { Search, ShoppingCart, User, Menu, X } from "lucide-react";
 
-export default function Header() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [location, navigate] = useLocation();
-  const { openCart, itemCount } = useCart();
-  const { isAuthenticated, isAdmin } = useAuth();
+export function Header() {
+  const [location] = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const { isAdmin, logout } = useAuth();
+  const { toggleCart, cartQuantity } = useCart();
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
-
-  const toggleSearch = () => {
-    setIsSearchOpen(!isSearchOpen);
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    navigate(`/products?search=${encodeURIComponent(searchQuery)}`);
-    setIsSearchOpen(false);
-  };
-
-  const isActive = (path: string) => {
-    return location === path ? "text-primary" : "hover:text-primary";
-  };
+  const isActive = (path: string) => location === path;
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm">
+    <header className="bg-white shadow-sm sticky top-0 z-50">
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between py-4">
+        <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="text-2xl font-bold text-primary">
-            RE LED LIGHT
+          <Link href="/">
+            <a className="flex items-center flex-shrink-0">
+              <span className="font-bold text-xl text-primary cursor-pointer">RE LED LIGHT</span>
+            </a>
           </Link>
           
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex space-x-6">
-            <Link href="/" className={`font-medium ${isActive("/")}`}>
-              Home
+          <nav className="hidden md:flex space-x-8">
+            <Link href="/">
+              <a className={`${isActive('/') ? 'text-primary' : 'text-gray-700'} hover:text-primary font-medium`}>Home</a>
             </Link>
-            <Link href="/products" className={`font-medium ${isActive("/products")}`}>
-              Products
+            <Link href="/products">
+              <a className={`${isActive('/products') ? 'text-primary' : 'text-gray-700'} hover:text-primary font-medium`}>Products</a>
             </Link>
-            <a href="#about" className="font-medium hover:text-primary">
-              About
-            </a>
-            <a href="#contact" className="font-medium hover:text-primary">
-              Contact
-            </a>
-            {isAdmin && (
-              <Link href="/admin/dashboard" className={`font-medium ${isActive("/admin/dashboard")}`}>
-                Admin
-              </Link>
-            )}
+            <a href="#" className="text-gray-700 hover:text-primary font-medium">About</a>
+            <a href="#" className="text-gray-700 hover:text-primary font-medium">Contact</a>
           </nav>
           
-          {/* Search, Cart, User Actions */}
+          {/* Action Buttons */}
           <div className="flex items-center space-x-4">
-            <button 
-              onClick={toggleSearch}
-              className="text-dark hover:text-primary"
+            {/* Search */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSearch(!showSearch)}
               aria-label="Search"
             >
-              <Search size={20} />
-            </button>
-            <button 
-              onClick={openCart}
-              className="relative text-dark hover:text-primary"
-              aria-label="Cart"
+              <Search className="h-5 w-5 text-gray-600 hover:text-primary" />
+            </Button>
+            
+            {/* Cart */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleCart}
+              className="relative"
+              aria-label="Shopping cart"
             >
-              <ShoppingCart size={20} />
-              {itemCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {itemCount}
+              <ShoppingCart className="h-5 w-5 text-gray-600 hover:text-primary" />
+              {cartQuantity > 0 && (
+                <span className="absolute -top-2 -right-2 bg-accent text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {cartQuantity}
                 </span>
               )}
-            </button>
-            <button 
-              onClick={toggleMobileMenu}
-              className="md:hidden text-dark hover:text-primary"
-              aria-label="Menu"
+            </Button>
+            
+            {/* Admin */}
+            {isAdmin ? (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Admin menu">
+                    <User className="h-5 w-5 text-gray-600 hover:text-primary" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent>
+                  <div className="flex flex-col gap-4 mt-4">
+                    <h3 className="text-lg font-semibold">Admin Menu</h3>
+                    <Link href="/admin/dashboard">
+                      <a className="text-gray-700 hover:text-primary py-2">Dashboard</a>
+                    </Link>
+                    <Link href="/admin/products">
+                      <a className="text-gray-700 hover:text-primary py-2">Manage Products</a>
+                    </Link>
+                    <Link href="/admin/orders">
+                      <a className="text-gray-700 hover:text-primary py-2">View Orders</a>
+                    </Link>
+                    <Button variant="outline" onClick={logout}>
+                      Logout
+                    </Button>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            ) : (
+              <Link href="/admin/login">
+                <Button variant="ghost" size="icon" aria-label="Admin login">
+                  <User className="h-5 w-5 text-gray-600 hover:text-primary" />
+                </Button>
+              </Link>
+            )}
+            
+            {/* Mobile menu button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             >
-              {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
+              {mobileMenuOpen ? (
+                <X className="h-5 w-5 text-gray-600 hover:text-primary" />
+              ) : (
+                <Menu className="h-5 w-5 text-gray-600 hover:text-primary" />
+              )}
+            </Button>
           </div>
         </div>
         
-        {/* Mobile Navigation */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-border-gray">
-            <nav className="flex flex-col space-y-3">
-              <Link 
-                href="/" 
-                className="font-medium hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
+        {/* Search Bar */}
+        {showSearch && (
+          <div className="py-3 border-t transition-all">
+            <div className="relative">
+              <Input 
+                type="text"
+                placeholder="Search for LED products..."
+                className="w-full pr-10"
+              />
+              <Button 
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full"
+                aria-label="Search"
               >
-                Home
-              </Link>
-              <Link 
-                href="/products" 
-                className="font-medium hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Products
-              </Link>
-              <a 
-                href="#about" 
-                className="font-medium hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                About
-              </a>
-              <a 
-                href="#contact" 
-                className="font-medium hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Contact
-              </a>
-              {isAdmin && (
-                <Link 
-                  href="/admin/dashboard" 
-                  className="font-medium hover:text-primary"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Admin
-                </Link>
-              )}
-              {!isAuthenticated && isAdmin && (
-                <Link 
-                  href="/admin/login" 
-                  className="font-medium hover:text-primary"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Login
-                </Link>
-              )}
-            </nav>
+                <Search className="h-4 w-4 text-gray-500 hover:text-primary" />
+              </Button>
+            </div>
           </div>
         )}
         
-        {/* Search Bar */}
-        {isSearchOpen && (
-          <div className="py-4 border-t border-border-gray">
-            <form onSubmit={handleSearch} className="relative">
-              <Input
-                type="text"
-                placeholder="Search for products..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-border-gray focus:outline-none focus:ring-2 focus:ring-primary/50"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-              />
-              <Search className="absolute left-3 top-3 text-gray-400" size={18} />
-              <Button 
-                type="submit" 
-                variant="ghost" 
-                size="sm" 
-                className="absolute right-2 top-1"
-              >
-                Search
-              </Button>
-            </form>
+        {/* Mobile Navigation Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden py-3 border-t">
+            <div className="flex flex-col space-y-3">
+              <Link href="/">
+                <a 
+                  className={`${isActive('/') ? 'text-primary' : 'text-gray-700'} hover:text-primary font-medium py-2`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Home
+                </a>
+              </Link>
+              <Link href="/products">
+                <a 
+                  className={`${isActive('/products') ? 'text-primary' : 'text-gray-700'} hover:text-primary font-medium py-2`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Products
+                </a>
+              </Link>
+              <a href="#" className="text-gray-700 hover:text-primary font-medium py-2">
+                About
+              </a>
+              <a href="#" className="text-gray-700 hover:text-primary font-medium py-2">
+                Contact
+              </a>
+            </div>
           </div>
         )}
       </div>

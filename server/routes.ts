@@ -1,283 +1,213 @@
-import express, { type Express, Request, Response } from "express";
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import session from "express-session";
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
-import MemoryStore from "memorystore";
+import express from "express";
+import { insertOrderSchema, insertProductSchema, orderItemsSchema } from "@shared/schema";
+import { ZodError } from "zod";
+import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Create session store
-  const MemoryStoreSession = MemoryStore(session);
-
-  // Configure session
-  app.use(
-    session({
-      secret: "re-led-light-secret",
-      resave: false,
-      saveUninitialized: false,
-      store: new MemoryStoreSession({
-        checkPeriod: 86400000, // prune expired entries every 24h
-      }),
-      cookie: {
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      },
-    })
-  );
-
-  // Configure passport
-  app.use(passport.initialize());
-  app.use(passport.session());
-
-  // Passport local strategy
-  passport.use(
-    new LocalStrategy(async (username, password, done) => {
-      try {
-        const user = await storage.getUserByUsername(username);
-        if (!user) {
-          return done(null, false, { message: "Incorrect username" });
-        }
-        if (user.password !== password) {
-          // In a real app, we would use bcrypt to compare hashed passwords
-          return done(null, false, { message: "Incorrect password" });
-        }
-        return done(null, user);
-      } catch (err) {
-        return done(err);
-      }
-    })
-  );
-
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id);
-  });
-
-  passport.deserializeUser(async (id: number, done) => {
-    try {
-      const user = await storage.getUser(id);
-      done(null, user);
-    } catch (err) {
-      done(err);
+  // Authentication middleware for admin routes
+  const requireAdmin = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(401).json({ message: "Authentication required" });
     }
-  });
-
-  // Authentication middleware
-  const isAuthenticated = (req: Request, res: Response, next: any) => {
-    if (req.isAuthenticated()) {
-      return next();
+    
+    const user = await storage.getUserByUsername(username);
+    if (!user || user.password !== password || !user.isAdmin) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
-    res.status(401).json({ message: "Unauthorized" });
+    
+    next();
   };
-
-  const isAdmin = (req: Request, res: Response, next: any) => {
-    if (req.isAuthenticated() && (req.user as any)?.isAdmin) {
-      return next();
-    }
-    res.status(403).json({ message: "Forbidden" });
-  };
-
-  // =========== API ROUTES ===========
-
-  // Auth routes
-  app.post("/api/auth/login", passport.authenticate("local"), (req, res) => {
-    res.json({ user: req.user });
-  });
-
-  app.post("/api/auth/logout", (req, res) => {
-    req.logout((err) => {
-      if (err) {
-        return res.status(500).json({ message: "Error during logout" });
-      }
-      res.json({ message: "Logged out successfully" });
-    });
-  });
-
-  app.get("/api/auth/me", (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    res.json({ user: req.user });
-  });
-
-  // Category routes
-  app.get("/api/categories", async (req, res) => {
-    try {
-      const categories = await storage.getCategories();
-      res.json(categories);
-    } catch (error) {
-      res.status(500).json({ message: "Error fetching categories" });
-    }
-  });
-
-  app.get("/api/categories/:slug", async (req, res) => {
-    try {
-      const category = await storage.getCategoryBySlug(req.params.slug);
-      if (!category) {
-        return res.status(404).json({ message: "Category not found" });
-      }
-      res.json(category);
-    } catch (error) {
-      res.status(500).json({ message: "Error fetching category" });
-    }
-  });
-
-  app.post("/api/categories", isAdmin, async (req, res) => {
-    try {
-      const category = await storage.createCategory(req.body);
-      res.status(201).json(category);
-    } catch (error) {
-      res.status(500).json({ message: "Error creating category" });
-    }
-  });
-
-  app.put("/api/categories/:id", isAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const category = await storage.updateCategory(id, req.body);
-      if (!category) {
-        return res.status(404).json({ message: "Category not found" });
-      }
-      res.json(category);
-    } catch (error) {
-      res.status(500).json({ message: "Error updating category" });
-    }
-  });
-
-  app.delete("/api/categories/:id", isAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const success = await storage.deleteCategory(id);
-      if (!success) {
-        return res.status(404).json({ message: "Category not found" });
-      }
-      res.json({ message: "Category deleted successfully" });
-    } catch (error) {
-      res.status(500).json({ message: "Error deleting category" });
-    }
-  });
 
   // Product routes
   app.get("/api/products", async (req, res) => {
     try {
-      const categoryId = req.query.categoryId
-        ? parseInt(req.query.categoryId as string)
-        : undefined;
+      const products = await storage.getProducts();
+      res.json(products);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
 
-      let products;
-      if (categoryId) {
-        products = await storage.getProductsByCategory(categoryId);
-      } else {
-        products = await storage.getProducts();
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid product ID" });
       }
-      res.json(products);
-    } catch (error) {
-      res.status(500).json({ message: "Error fetching products" });
-    }
-  });
-
-  app.get("/api/products/featured", async (req, res) => {
-    try {
-      const products = await storage.getFeaturedProducts();
-      res.json(products);
-    } catch (error) {
-      res.status(500).json({ message: "Error fetching featured products" });
-    }
-  });
-
-  app.get("/api/products/:slug", async (req, res) => {
-    try {
-      const product = await storage.getProductBySlug(req.params.slug);
+      
+      const product = await storage.getProductById(id);
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
+      
       res.json(product);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching product" });
+      res.status(500).json({ message: "Failed to fetch product" });
     }
   });
 
-  app.post("/api/products", isAdmin, async (req, res) => {
+  app.get("/api/products/category/:category", async (req, res) => {
     try {
-      const product = await storage.createProduct(req.body);
+      const { category } = req.params;
+      const products = await storage.getProductsByCategory(category);
+      res.json(products);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch products by category" });
+    }
+  });
+
+  // Admin routes for product management
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      const user = await storage.getUserByUsername(username);
+      if (!user || user.password !== password || !user.isAdmin) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      
+      res.json({ success: true, message: "Login successful" });
+    } catch (error) {
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/admin/products", requireAdmin, async (req, res) => {
+    try {
+      const productData = insertProductSchema.parse(req.body);
+      const product = await storage.createProduct(productData);
       res.status(201).json(product);
     } catch (error) {
-      res.status(500).json({ message: "Error creating product" });
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      res.status(500).json({ message: "Failed to create product" });
     }
   });
 
-  app.put("/api/products/:id", isAdmin, async (req, res) => {
+  app.put("/api/admin/products/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const product = await storage.updateProduct(id, req.body);
-      if (!product) {
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+      
+      const productData = insertProductSchema.partial().parse(req.body);
+      const updatedProduct = await storage.updateProduct(id, productData);
+      
+      if (!updatedProduct) {
         return res.status(404).json({ message: "Product not found" });
       }
-      res.json(product);
+      
+      res.json(updatedProduct);
     } catch (error) {
-      res.status(500).json({ message: "Error updating product" });
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      res.status(500).json({ message: "Failed to update product" });
     }
   });
 
-  app.delete("/api/products/:id", isAdmin, async (req, res) => {
+  app.delete("/api/admin/products/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteProduct(id);
-      if (!success) {
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+      
+      const deleted = await storage.deleteProduct(id);
+      
+      if (!deleted) {
         return res.status(404).json({ message: "Product not found" });
       }
-      res.json({ message: "Product deleted successfully" });
+      
+      res.json({ success: true, message: "Product deleted successfully" });
     } catch (error) {
-      res.status(500).json({ message: "Error deleting product" });
+      res.status(500).json({ message: "Failed to delete product" });
     }
   });
 
   // Order routes
-  app.get("/api/orders", isAdmin, async (req, res) => {
+  app.post("/api/orders", async (req, res) => {
+    try {
+      // Validate order items
+      const { items, ...orderData } = req.body;
+      
+      try {
+        orderItemsSchema.parse(items);
+      } catch (error) {
+        if (error instanceof ZodError) {
+          const validationError = fromZodError(error);
+          return res.status(400).json({ message: validationError.message });
+        }
+      }
+      
+      // Calculate total amount from items
+      const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+      
+      // Create order with validated data
+      const orderInput = insertOrderSchema.parse({
+        ...orderData,
+        items,
+        totalAmount
+      });
+      
+      const order = await storage.createOrder(orderInput);
+      res.status(201).json(order);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
+      }
+      res.status(500).json({ message: "Failed to create order" });
+    }
+  });
+
+  app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     try {
       const orders = await storage.getOrders();
       res.json(orders);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching orders" });
+      res.status(500).json({ message: "Failed to fetch orders" });
     }
   });
 
-  app.get("/api/orders/:id", isAdmin, async (req, res) => {
+  app.put("/api/admin/orders/:id/status", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const order = await storage.getOrder(id);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid order ID" });
       }
-      res.json(order);
-    } catch (error) {
-      res.status(500).json({ message: "Error fetching order" });
-    }
-  });
-
-  app.post("/api/orders", async (req, res) => {
-    try {
-      const order = await storage.createOrder(req.body);
-      res.status(201).json(order);
-    } catch (error) {
-      res.status(500).json({ message: "Error creating order" });
-    }
-  });
-
-  app.put("/api/orders/:id/status", isAdmin, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
+      
       const { status } = req.body;
-      const order = await storage.updateOrderStatus(id, status);
-      if (!order) {
+      
+      if (!status || typeof status !== "string") {
+        return res.status(400).json({ message: "Status is required" });
+      }
+      
+      const updatedOrder = await storage.updateOrderStatus(id, status);
+      
+      if (!updatedOrder) {
         return res.status(404).json({ message: "Order not found" });
       }
-      res.json(order);
+      
+      res.json(updatedOrder);
     } catch (error) {
-      res.status(500).json({ message: "Error updating order status" });
+      res.status(500).json({ message: "Failed to update order status" });
     }
   });
 
   const httpServer = createServer(app);
-
   return httpServer;
 }
