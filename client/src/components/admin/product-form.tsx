@@ -7,18 +7,26 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { 
+  Form, 
+  FormControl, 
+  FormField, 
+  FormItem, 
+  FormLabel, 
+  FormMessage 
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-
-interface ProductFormProps {
-  initialData?: Product;
-  mode: "create" | "edit";
-}
+import { Loader2 } from "lucide-react";
 
 const productSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
@@ -29,8 +37,6 @@ const productSchema = z.object({
   category: z.string().min(1, "Category is required"),
   imageUrl: z.string().url("Must be a valid URL"),
   featured: z.boolean().default(false),
-  rating: z.string().optional(),
-  reviews: z.coerce.number().optional(),
   stock: z.coerce.number().min(0, "Stock cannot be negative"),
 });
 
@@ -47,8 +53,6 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
         ...initialData,
         price: initialData.price.toString(),
         originalPrice: initialData.originalPrice?.toString() || "",
-        rating: initialData.rating.toString(),
-        reviews: initialData.reviews,
         stock: initialData.stock,
       }
     : {
@@ -60,71 +64,62 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
         category: "",
         imageUrl: "",
         featured: false,
-        rating: "0",
-        reviews: 0,
         stock: 0,
       };
   
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues,
+    mode: "onChange",
   });
-  
-  const createProductMutation = useMutation({
-    mutationFn: async (data: InsertProduct) => {
-      const response = await apiRequest("POST", "/api/admin/products", data);
-      return response.json();
-    },
+
+  const mutationOptions = {
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       toast({
-        title: "Product created successfully",
-        description: "The product has been added to the catalog.",
+        title: `Product ${mode === "create" ? "created" : "updated"} successfully`,
+        description: `The product has been ${mode === "create" ? "added to" : "updated in"} the catalog.`,
       });
       navigate("/admin/products");
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Failed to create product",
+        title: `Failed to ${mode === "create" ? "create" : "update"} product`,
         description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
-      setIsSubmitting(false);
     },
+    onSettled: () => {
+      setIsSubmitting(false);
+    }
+  };
+
+  const createProductMutation = useMutation({
+    mutationFn: (data: InsertProduct) => 
+      apiRequest("POST", "/api/admin/products", data),
+    ...mutationOptions
   });
   
   const updateProductMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertProduct> }) => {
-      const response = await apiRequest("PUT", `/api/admin/products/${id}`, data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      toast({
-        title: "Product updated successfully",
-        description: "The product has been updated in the catalog.",
-      });
-      navigate("/admin/products");
-    },
-    onError: (error) => {
-      toast({
-        title: "Failed to update product",
-        description: error.message || "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
-      setIsSubmitting(false);
-    },
+    mutationFn: ({ id, data }: { id: number; data: Partial<InsertProduct> }) => 
+      apiRequest("PUT", `/api/admin/products/${id}`, data),
+    ...mutationOptions
   });
   
-  const onSubmit = (data: ProductFormValues) => {
+  const onSubmit = async (data: ProductFormValues) => {
     setIsSubmitting(true);
-    
+    const productData = {
+      ...data,
+      price: parseFloat(data.price),
+      originalPrice: data.originalPrice ? parseFloat(data.originalPrice) : undefined,
+    };
+
     if (mode === "create") {
-      createProductMutation.mutate(data as InsertProduct);
+      createProductMutation.mutate(productData as InsertProduct);
     } else if (mode === "edit" && initialData) {
       updateProductMutation.mutate({
         id: initialData.id,
-        data: data as Partial<InsertProduct>,
+        data: productData
       });
     }
   };
@@ -138,9 +133,13 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Product Name</FormLabel>
+                <FormLabel>Product Name*</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter product name" {...field} />
+                  <Input 
+                    placeholder="Enter product name" 
+                    {...field} 
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -152,10 +151,11 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
             name="category"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Category</FormLabel>
+                <FormLabel>Category*</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   defaultValue={field.value}
+                  disabled={isSubmitting}
                 >
                   <FormControl>
                     <SelectTrigger>
@@ -181,9 +181,16 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
             name="price"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Price (₹)</FormLabel>
+                <FormLabel>Price (₹)*</FormLabel>
                 <FormControl>
-                  <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                  <Input 
+                    type="number" 
+                    min="0" 
+                    step="0.01" 
+                    placeholder="0.00" 
+                    {...field} 
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -195,9 +202,16 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
             name="originalPrice"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Original Price (₹) (Optional)</FormLabel>
+                <FormLabel>Original Price (₹)</FormLabel>
                 <FormControl>
-                  <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                  <Input 
+                    type="number" 
+                    min="0" 
+                    step="0.01" 
+                    placeholder="0.00" 
+                    {...field} 
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -209,9 +223,14 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
             name="stock"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Stock</FormLabel>
+                <FormLabel>Stock*</FormLabel>
                 <FormControl>
-                  <Input type="number" min="0" {...field} />
+                  <Input 
+                    type="number" 
+                    min="0" 
+                    {...field} 
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -224,13 +243,14 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
           name="shortDescription"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Short Description</FormLabel>
+              <FormLabel>Short Description*</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Brief description shown in product listings"
                   className="resize-none"
                   rows={2}
                   {...field}
+                  disabled={isSubmitting}
                 />
               </FormControl>
               <FormMessage />
@@ -243,13 +263,14 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Full Description</FormLabel>
+              <FormLabel>Full Description*</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Detailed product description"
                   className="resize-none"
                   rows={6}
                   {...field}
+                  disabled={isSubmitting}
                 />
               </FormControl>
               <FormMessage />
@@ -262,9 +283,13 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
           name="imageUrl"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Image URL</FormLabel>
+              <FormLabel>Image URL*</FormLabel>
               <FormControl>
-                <Input placeholder="https://example.com/image.jpg" {...field} />
+                <Input 
+                  placeholder="https://example.com/image.jpg" 
+                  {...field} 
+                  disabled={isSubmitting}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -280,28 +305,35 @@ export default function ProductForm({ initialData, mode }: ProductFormProps) {
                 <Checkbox
                   checked={field.value}
                   onCheckedChange={field.onChange}
+                  disabled={isSubmitting}
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel>Featured Product</FormLabel>
-                <p className="text-sm text-gray-500">
-                  This product will be displayed in the featured section on the homepage.
+                <p className="text-sm text-muted-foreground">
+                  Display in featured section on homepage
                 </p>
               </div>
             </FormItem>
           )}
         />
         
-        <div className="flex justify-end space-x-4">
+        <div className="flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
             onClick={() => navigate("/admin/products")}
+            disabled={isSubmitting}
           >
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : mode === "create" ? "Create Product" : "Update Product"}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Please wait
+              </>
+            ) : mode === "create" ? "Create Product" : "Update Product"}
           </Button>
         </div>
       </form>
