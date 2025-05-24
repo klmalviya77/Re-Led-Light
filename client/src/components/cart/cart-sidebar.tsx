@@ -3,6 +3,7 @@ import { X, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { formatPrice } from "@/lib/utils";
+import Image from "next/image"; // If using Next.js
 
 export default function CartSidebar() {
   const { 
@@ -11,117 +12,155 @@ export default function CartSidebar() {
     closeCart, 
     subtotal, 
     removeItem, 
-    updateQuantity 
+    updateQuantity,
+    isUpdating
   } = useCart();
 
+  const itemCount = items.length;
+  const isEmpty = itemCount === 0;
+
   return (
-    <div className={`fixed top-0 right-0 h-full w-full md:w-96 bg-white shadow-xl z-50 transform transition-transform duration-300 ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+    <div 
+      className={`fixed inset-0 md:left-auto h-full w-full md:w-96 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      aria-modal="true"
+      aria-hidden={!isCartOpen}
+      aria-label="Shopping cart"
+    >
       <div className="p-6 h-full flex flex-col">
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold">Your Cart</h2>
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5" />
+            Your Cart {!isEmpty && `(${itemCount})`}
+          </h2>
           <button 
             onClick={closeCart}
-            className="text-dark hover:text-primary"
+            className="p-1 text-gray-500 hover:text-primary transition-colors"
             aria-label="Close cart"
           >
             <X size={24} />
           </button>
         </div>
         
+        {/* Cart Items */}
         <div className="flex-1 overflow-y-auto">
-          {items.length === 0 ? (
-            <div className="text-center py-10">
+          {isEmpty ? (
+            <div className="h-full flex flex-col items-center justify-center text-center py-10">
               <ShoppingCart className="mx-auto text-gray-300 mb-4" size={48} />
-              <p className="text-gray-500">Your cart is empty</p>
+              <p className="text-gray-500 mb-4">Your cart is empty</p>
               <Button
-                variant="link"
-                className="mt-4 text-primary hover:underline"
-                onClick={() => {
-                  closeCart();
-                }}
+                variant="default"
+                className="mt-2"
+                onClick={closeCart}
               >
                 Start shopping
               </Button>
             </div>
           ) : (
-            <div className="space-y-4">
+            <ul className="space-y-4 divide-y divide-gray-200">
               {items.map((item) => (
-                <div key={item.id} className="border-b border-border-gray py-4 flex items-center space-x-4">
-                  <img 
-                    src={item.image} 
-                    alt={item.name} 
-                    className="w-20 h-20 object-cover rounded"
-                  />
-                  <div className="flex-1">
-                    <h4 className="font-medium">{item.name}</h4>
-                    <p className="text-sm text-gray-500">
-                      {item.quantity} × {formatPrice(item.salePrice || item.price)}
-                    </p>
-                    <div className="flex items-center mt-2">
-                      <button 
-                        className="text-xs bg-light-gray px-2 py-1 rounded"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      >
-                        -
-                      </button>
-                      <span className="mx-2 text-sm">{item.quantity}</span>
-                      <button 
-                        className="text-xs bg-light-gray px-2 py-1 rounded"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      >
-                        +
-                      </button>
+                <li key={item.id} className="py-4 first:pt-0">
+                  <div className="flex gap-4">
+                    <div className="relative w-20 h-20 flex-shrink-0">
+                      <img 
+                        src={item.image} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover rounded"
+                        loading="lazy"
+                        width={80}
+                        height={80}
+                      />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium truncate">{item.name}</h4>
+                      <p className="text-sm text-gray-500 mb-2">
+                        {formatPrice(item.salePrice || item.price)}
+                      </p>
+                      
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center border rounded-md">
+                          <button 
+                            className="px-2 py-1 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            disabled={item.quantity <= 1 || isUpdating}
+                            aria-label="Decrease quantity"
+                          >
+                            −
+                          </button>
+                          <span className="px-2 text-sm w-8 text-center">
+                            {item.quantity}
+                          </span>
+                          <button 
+                            className="px-2 py-1 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            disabled={isUpdating}
+                            aria-label="Increase quantity"
+                          >
+                            +
+                          </button>
+                        </div>
+                        
+                        <button 
+                          className="text-sm text-red-500 hover:text-red-700 hover:underline"
+                          onClick={() => removeItem(item.id)}
+                          disabled={isUpdating}
+                          aria-label="Remove item"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="text-right font-medium">
+                      {formatPrice((item.salePrice || item.price) * item.quantity)}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold">
-                      {formatPrice((item.salePrice || item.price) * item.quantity)}
-                    </p>
-                    <button 
-                      className="text-xs text-danger mt-2 hover:underline"
-                      onClick={() => removeItem(item.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
         
-        <div className="border-t border-border-gray pt-4 mt-4">
-          <div className="flex justify-between mb-2">
-            <span>Subtotal</span>
-            <span className="font-bold">{formatPrice(subtotal)}</span>
-          </div>
-          <div className="flex justify-between mb-4">
-            <span>Shipping</span>
-            <span>Free</span>
-          </div>
-          <div className="flex justify-between text-lg font-bold mb-6">
-            <span>Total</span>
-            <span>{formatPrice(subtotal)}</span>
-          </div>
-          
-          <Link href="/checkout">
-            <Button 
-              className="w-full bg-primary hover:bg-primary/90 text-white py-3 rounded-lg font-medium"
+        {/* Footer */}
+        {!isEmpty && (
+          <div className="border-t border-gray-200 pt-4 mt-auto">
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Subtotal</span>
+                <span className="font-medium">{formatPrice(subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Shipping</span>
+                <span className="text-green-600">Free</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
+                <span>Total</span>
+                <span>{formatPrice(subtotal)}</span>
+              </div>
+            </div>
+            
+            <Link href="/checkout">
+              <Button 
+                className="w-full py-3 rounded-md font-medium"
+                size="lg"
+                onClick={closeCart}
+                disabled={isEmpty || isUpdating}
+              >
+                Proceed to Checkout
+              </Button>
+            </Link>
+            
+            <Button
+              variant="outline"
+              className="w-full mt-3"
               onClick={closeCart}
-              disabled={items.length === 0}
+              disabled={isUpdating}
             >
-              Proceed to Checkout
+              Continue Shopping
             </Button>
-          </Link>
-          
-          <Button
-            variant="ghost"
-            className="w-full text-center mt-4 text-dark hover:text-primary"
-            onClick={closeCart}
-          >
-            Continue Shopping
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
